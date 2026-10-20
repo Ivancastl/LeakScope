@@ -1,0 +1,12 @@
+{% extends 'base.html' %}
+{% block title %}Error {{ code }} · Explorador{% endblock %}
+{% block body %}
+<main class="auth">
+  <div class="auth-card">
+    <div class="brand"><span class="logo" aria-hidden="true"></span>Explorador CSV</div>
+    <h1>Error {{ code }}</h1>
+    <p class="muted">{{ message }}</p>
+    <a class="btn primary block" href="{{ url_for('index') }}">Volver al inicio</a>
+  </div>
+</main>
+{% endblock %}

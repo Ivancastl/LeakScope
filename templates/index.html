@@ -1,0 +1,126 @@
+{% extends 'base.html' %}
+{% block body %}
+{% set args = request.args.to_dict() %}
+{% set cur_sort = args.get('orden', 'vistas') %}
+{% set cur_dir = args.get('direccion', 'desc') %}
+{% set cur_src = args.get('fuente', '') %}
+<main class="wrap">
+  <header class="head">
+    <div>
+      <div class="eyebrow">LeakScope · Buscador OSINT</div>
+      <h1>Registros de los foros</h1>
+      <p>Busca y compara los metadatos de ambos archivos. Los campos de URL se excluyen de la vista y de la descarga.</p>
+    </div>
+    <a class="btn primary" href="{{ url_for('export', **args) }}">
+      <svg viewBox="0 0 24 24"><path d="M12 3v12M7 10l5 5 5-5M5 21h14"/></svg>Descargar CSV
+    </a>
+  </header>
+
+  {% for error in errors %}<div class="alert">{{ error }}</div>{% endfor %}
+
+  <section class="stats">
+    <div class="stat"><span class="stat-label">Resultados</span><span class="stat-value">{{ '{:,}'.format(total) }}</span></div>
+    {% for s, n in counts.items() %}
+    <div class="stat src-{{ s }}"><span class="stat-label">{{ s }}</span><span class="stat-value">{{ '{:,}'.format(n) }}</span></div>
+    {% endfor %}
+  </section>
+
+  <form class="filters" method="get">
+    {% if cur_src %}<input type="hidden" name="fuente" value="{{ cur_src }}">{% endif %}
+    <div class="row">
+      <label class="search">Buscar
+        <span class="field"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg><input type="search" name="q" placeholder="Título, autor, identificador…" value="{{ args.get('q','') }}"></span>
+      </label>
+      <label>Fuente
+        <span class="seg">
+          <a class="{% if not cur_src %}on{% endif %}" href="{{ url_for('index', **dict(args, fuente='', pagina=1)) }}">Todas</a>
+          {% for s in counts %}
+          <a class="{% if cur_src == s %}on{% endif %}" href="{{ url_for('index', **dict(args, fuente=s, pagina=1)) }}"><span class="dot src-{{ s }}"></span>{{ s }}</a>
+          {% endfor %}
+        </span>
+      </label>
+    </div>
+    <div class="row">
+      <label>Ordenar por
+        <select name="orden">
+          {% for f in fields %}<option value="{{ f }}" {% if cur_sort == f %}selected{% endif %}>{{ labels.get(f, f) }}</option>{% endfor %}
+        </select>
+      </label>
+      <label>Dirección
+        <select name="direccion">
+          <option value="desc">Descendente</option>
+          <option value="asc" {% if cur_dir == 'asc' %}selected{% endif %}>Ascendente</option>
+        </select>
+      </label>
+      <label>Vista
+        <select name="detalle">
+          <option value="0">Campos principales</option>
+          <option value="1" {% if args.get('detalle') == '1' %}selected{% endif %}>Todos los campos</option>
+        </select>
+      </label>
+      <div class="actions">
+        <a class="btn outline" href="{{ url_for('index') }}">Limpiar</a>
+        <button class="btn primary" type="submit">
+          <svg viewBox="0 0 24 24"><path d="M4 6h16M7 12h10M10 18h4"/></svg>Aplicar filtros
+        </button>
+      </div>
+    </div>
+  </form>
+
+  <section class="card">
+    <div class="card-head">
+      <span><strong>{{ '{:,}'.format(total) }} registros</strong> <span class="muted">· página {{ page }} de {{ pages }}</span></span>
+      <span class="muted small">Haz clic en un encabezado para ordenar</span>
+    </div>
+    <div class="scroll">
+      <table>
+        <thead><tr>
+          {% for f in columns %}
+          {% set active = cur_sort == f %}
+          {% set nd = 'asc' if active and cur_dir == 'desc' else 'desc' %}
+          <th class="{% if f in numeric %}num{% endif %}{% if active %} active{% endif %}">
+            <a href="{{ url_for('index', **dict(args, orden=f, direccion=nd, pagina=1)) }}">{{ labels.get(f, f) }}{% if active %}<span class="arrow">{{ '↓' if cur_dir == 'desc' else '↑' }}</span>{% endif %}</a>
+          </th>
+          {% endfor %}
+        </tr></thead>
+        <tbody>
+        {% for row in rows %}
+          <tr>
+          {% for f in columns %}
+            {% set v = row.get(f, '') %}
+            {% if f == 'fuente' %}<td><span class="chip src-{{ v }}">{{ v }}</span></td>
+            {% elif f == 'titulo' %}<td class="title">{% if row.get('prefijo') %}<span class="tag">{{ row.prefijo }}</span>{% endif %}{{ v or '—' }}</td>
+            {% elif f == 'ultimo_post_usuario' %}<td class="user">{{ v or '—' }}{% if row.get('ultimo_post_fecha') %}<span class="by">{{ row.ultimo_post_fecha | fecha }}</span>{% endif %}</td>
+            {% elif f in numeric %}<td class="num">{{ v or '—' }}</td>
+            {% elif f in dates %}<td class="date{% if f == 'ultimo_post_fecha' %} hl{% endif %}">{{ (v | fecha) if v else '—' }}</td>
+            {% else %}<td class="{% if not v %}empty{% endif %}">{{ v or '—' }}</td>
+            {% endif %}
+          {% endfor %}
+          </tr>
+        {% else %}
+          <tr><td class="none" colspan="{{ columns|length }}">Sin resultados para esta búsqueda.</td></tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <nav class="pager">
+      <a class="btn outline sm" href="{{ page_url(page-1) if page > 1 else '#' }}" {% if page <= 1 %}aria-disabled="true"{% endif %}>← Anterior</a>
+      <div class="pg-nums">
+        {% for n in range(1, pages + 1) %}
+          {% if n == 1 or n == pages or (n >= page - 2 and n <= page + 2) %}
+            {% if n == page %}<span class="pg current">{{ n }}</span>{% else %}<a class="pg" href="{{ page_url(n) }}">{{ n }}</a>{% endif %}
+          {% elif n == page - 3 or n == page + 3 %}<span class="gap">…</span>
+          {% endif %}
+        {% endfor %}
+      </div>
+      <a class="btn outline sm" href="{{ page_url(page+1) if page < pages else '#' }}" {% if page >= pages %}aria-disabled="true"{% endif %}>Siguiente →</a>
+    </nav>
+  </section>
+
+  <details class="card">
+    <summary>Campos disponibles ({{ fields|length }})</summary>
+    <div class="fields">{% for f in fields %}<code>{{ f }}</code>{% endfor %}</div>
+    <p class="muted small">«fuente» identifica el archivo de origen. Las fechas se muestran normalizadas (AAAA-MM-DD HH:MM); su ordenación es textual sobre el valor original. Los títulos son afirmaciones de las publicaciones originales.</p>
+  </details>
+</main>
+{% endblock %}
